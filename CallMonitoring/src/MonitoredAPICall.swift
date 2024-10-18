@@ -87,15 +87,19 @@ class MonitoredAPICall {
   
     // async version of callAPI that takes APIURLComponents and Priority
     // and returns the success status along with the response data
-    func callAPI(urlComponents: APIURLComponents, priority: Priority) async -> APICallResult {
+    // Updated callAPI with an optional `shouldSendStats` parameter
+    func callAPI(urlComponents: APIURLComponents, priority: Priority, shouldSendStats: Bool = true) async -> APICallResult {
         let startTime = Date()
         let result = await makeRequest(urlComponents: urlComponents, priority: priority)
         self.timeTaken = Date().timeIntervalSince(startTime)
         self.completed = result.success
         self.success = result.success
-        // Send data to APIStats
-        let stats = APIStats()
-        stats.sendStats(timeTaken: self.timeTaken, retries: self.retries, success: self.success)
+        // Conditionally send stats unless explicitly disabled (e.g., for APIStats calls)
+        if shouldSendStats {
+            let stats = APIStats()
+            stats.sendStats(timeTaken: self.timeTaken, retries: self.retries, success: self.success, urlComponents: urlComponents)
+        }
+
         return result
     }
     
