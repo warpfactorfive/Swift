@@ -11,21 +11,64 @@
 //  The collection supports various operations such as appending, sorting, 
 //  filtering, and removing elements, while maintaining thread safety.
 //
+//  Note that operations are considered in FIFO order.  This could be
+//  important for operations that read data while a write operation is
+//  pending, based on order of operation submission.
+//
 // Example with Array of Ints:
-// let threadSafeArray = ThreadSafeCollection<Array<Int>>()
-// 
-// Task {
-//     await threadSafeArray.append(5)
-//     await threadSafeArray.append(10)
-//     await threadSafeArray.append(3)
+//     let threadSafeArray = ThreadSafeCollection<Array<Int>>()
+//     do {
+//         try await threadSafeArray.append(5)
+//         try await threadSafeArray.append(10)
+//         try await threadSafeOptionalArray.append(nil)
+//     } catch {
+//         // error handling code here
+//     }
 // 
 //     await threadSafeArray.sort()
 //     let sortedArray = await threadSafeArray.allElements()
 //     print("Sorted Array: \(sortedArray)")
-// }
 
+enum ThreadSafeCollectionError: Error, LocalizedError {
+    case nilValueNotAllowed
+    case indexOutOfBounds(index: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .nilValueNotAllowed:
+            return "Error: Cannot append a nil value to the collection."
+        case .indexOutOfBounds(let index):
+            return "Error: Index \(index) is out of bounds."
+        }
+    }
+}
 
 import Foundation
+
+// Define a custom error type for the ThreadSafeCollection
+enum ThreadSafeCollectionError: Error, LocalizedError {
+    case nilValueNotAllowed
+    case indexOutOfBounds(index: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .nilValueNotAllowed:
+            return "Error: Cannot append a nil value to the collection."
+        case .indexOutOfBounds(let index):
+            return "Error: Index \(index) is out of bounds."
+        }
+    }
+}
+
+// Protocol to handle checking if a value is nil in a generic way
+protocol OptionalProtocol {
+    var isNil: Bool { get }
+}
+
+// Extension to make Optional conform to OptionalProtocol
+extension Optional: OptionalProtocol {
+    var isNil: Bool { self == nil }
+}
 
 actor ThreadSafeCollection<CollectionType> where CollectionType: RangeReplaceableCollection {
     private var collection: CollectionType
@@ -35,13 +78,19 @@ actor ThreadSafeCollection<CollectionType> where CollectionType: RangeReplaceabl
     }
 
     // Add an element to the collection (write operation)
-    func append(_ element: CollectionType.Element) {
+    func append(_ element: CollectionType.Element) throws {
+        // Ensure we are not appending nil to a collection of optionals
+        if let optionalElement = element as? OptionalProtocol, optionalElement.isNil {
+            throw ThreadSafeCollectionError.nilValueNotAllowed
+        }
         collection.append(element)
     }
 
     // Get the element at a specific index (read operation, only for collections that support indexing)
-    func element(at index: CollectionType.Index) -> CollectionType.Element? where CollectionType: RandomAccessCollection {
-        guard collection.indices.contains(index) else { return nil }
+    func element(at index: CollectionType.Index) throws -> CollectionType.Element? where CollectionType: RandomAccessCollection {
+        guard collection.indices.contains(index) else {
+            throw ThreadSafeCollectionError.indexOutOfBounds(index: index as! Int)
+        }
         return collection[index]
     }
 
@@ -51,8 +100,10 @@ actor ThreadSafeCollection<CollectionType> where CollectionType: RangeReplaceabl
     }
 
     // Remove the element at a specific index (write operation, only for collections that support indexing)
-    func remove(at index: CollectionType.Index) where CollectionType: RangeReplaceableCollection & RandomAccessCollection {
-        guard collection.indices.contains(index) else { return }
+    func remove(at index: CollectionType.Index) throws where CollectionType: RangeReplaceableCollection & RandomAccessCollection {
+        guard collection.indices.contains(index) else {
+            throw ThreadSafeCollectionError.indexOutOfBounds(index: index as! Int)
+        }
         collection.remove(at: index)
     }
 
