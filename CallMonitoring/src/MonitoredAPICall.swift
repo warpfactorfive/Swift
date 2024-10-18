@@ -156,10 +156,10 @@ class MonitoredAPICall {
     }
 
     // call API Method using a completion block, processes on main thread if high priority
-    func callAPIWithCompletion(urlComponents: APIURLComponents, priority: Priority, completion: @escaping (APICallResult) -> Void) {
+    func callAPIWithCompletion(urlComponents: APIURLComponents, priority: Priority,  shouldSendStats: Bool = true, completion: @escaping (APICallResult) -> Void) {
         Task {
             // Reuse the callAPI method
-            let result = await self.callAPI(urlComponents: urlComponents, priority: priority)
+            let result = await self.callAPI(urlComponents: urlComponents, priority: priority, shouldSendStats: shouldSendStats)
             
             // If high priority, ensure the completion block runs on the main thread
             if priority == .high {
